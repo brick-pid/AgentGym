@@ -106,5 +106,18 @@ class SqlGymEnvServer:
         if self.env[env_idx] is None:
             raise NotInitializedError(f"Env {env_idx} not initialized")
 
+    def close(self, env_idx: int):
+        self._check_env_idx(env_idx)
+        env, _ = self.env[env_idx]
+        if env is not None:
+            try:
+                env.close()
+            except Exception:
+                pass
+        del self.env[env_idx]
+        if env_idx in self.ls:
+            self.ls.remove(env_idx)
+        return True
+
 
 sqlgym_env_server = SqlGymEnvServer()

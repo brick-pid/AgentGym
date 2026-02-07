@@ -170,6 +170,23 @@ class ALFWorld_Wrapper:
             print("done", self.info[idx]["done"])
             raise NameError(f"The task with environment {idx} has finished.")
 
+    def close(self, idx: int):
+        self._check_id(idx, True)
+        try:
+            if idx in self.env_init:
+                self.env_init[idx].close()
+        except Exception:
+            pass
+        try:
+            if idx in self.env:
+                self.env[idx].close()
+        except Exception:
+            pass
+        self.info[idx]["deleted"] = True
+        if idx in self.ls:
+            self.ls.remove(idx)
+        return True
+
 
 os.environ["ALFWORLD_DATA"] = os.path.expanduser("~/.cache/alfworld")
 server = ALFWorld_Wrapper(

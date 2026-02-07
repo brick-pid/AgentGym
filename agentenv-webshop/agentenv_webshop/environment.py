@@ -94,10 +94,19 @@ class WebshopEnvServer:
 
     def reset(self, env_idx, task_id: Optional[int]):
         return self.env[env_idx].reset(session=task_id)
+
+    def close(self, env_idx: int):
+        if env_idx not in self.env:
+            raise IndexError(f"Env {env_idx} not found")
+        self.env[env_idx].close()
+        del self.env[env_idx]
+        if env_idx in self.ls:
+            self.ls.remove(env_idx)
+        return True
     
     def __del__(self):
         for idx in self.ls:
-            self.env[idx].close
+            self.env[idx].close()
             print(f"-------Env {idx} closed--------")
 
 

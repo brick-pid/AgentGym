@@ -113,5 +113,12 @@ class Lmrlgym_WordleEnv:
         if not is_reset and self.info[idx]["done"]:
             raise NameError(f"The task with environment {idx} has finished.")
 
+    def close(self, idx: int):
+        self._check_id(idx, True)
+        if idx in self.env:
+            del self.env[idx]
+        self.info[idx]["deleted"] = True
+        return True
+
 
 wordle_server = Lmrlgym_WordleEnv()

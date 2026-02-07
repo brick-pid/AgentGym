@@ -131,5 +131,13 @@ class Lmrlgym_MazeEnv:
         if not is_reset and self.info[idx]["done"]:
             raise NameError(f"The task with environment {idx} has finished.")
 
+    def close(self, idx: int):
+        self._check_id(idx, True)
+        if idx in self.env:
+            self.env[idx].close()
+            del self.env[idx]
+        self.info[idx]["deleted"] = True
+        return True
+
 
 maze_server = Lmrlgym_MazeEnv()
