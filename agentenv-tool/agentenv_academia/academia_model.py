@@ -21,3 +21,7 @@ class StepResponse(BaseModel):
 class ResetQuery(BaseModel):
     env_id: int
     task_id: int = 0
+
+
+class CloseRequestBody(BaseModel):
+    env_id: int
