@@ -1,5 +1,8 @@
 from fastapi import FastAPI
 import os
+from fastapi.responses import JSONResponse
+
+from utils.error_utils import wrap_call
 from .model import *
 from .env_wrapper import server
 
@@ -17,53 +20,49 @@ if VISUAL:
         allow_headers=["*"],
     )
 
-@app.get("/")
-def hello():
-    return "This is environment TextCraft."
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "textcraft"}
 
 
 @app.post("/create")
 async def create(body: CreateRequestBody):
-    return server.create(body.commands, body.goal)
+    result = wrap_call(server.create, body.commands, body.goal)
+    if isinstance(result, JSONResponse):
+        return result
+    return result
 
 
 @app.post("/step")
 def step(body: StepRequestBody):
-    env_id = body.env_id
-    print(f"/step {env_id} {body.action}")
-    return server.step(env_id, body.action)
+    result = wrap_call(server.step, body.env_id, body.action)
+    if isinstance(result, JSONResponse):
+        return result
+    if isinstance(result, dict) and "done" in result:
+        return {
+            "observation": result.get("observation"),
+            "reward": result.get("reward", 0),
+            "done": result.get("done", False),
+            "info": {k: v for k, v in result.items() if k not in {"observation", "reward", "done"}},
+        }
+    return result
 
 
 @app.post("/reset")
 def reset(body: ResetRequestBody):
-    env_id = body.env_id
-    task_id = body.task_id
-    print(f"/reset {env_id} {task_id}")
-    return server.reset(env_id, task_id)
-
-
-@app.get("/observation")
-def get_observation(env_id: int):
-    print(f"/observation {env_id}")
-    return server.get_observation(env_id)
-
-
-@app.get("/commands")
-def get_commands(env_id: int):
-    return server.get_commands(env_id)
-
-
-@app.get("/goal")
-def get_goal(env_id: int):
-    return server.get_goal(env_id)
-
-
-@app.get("/detail")
-def get_detailed_info(env_id: int):
-    return server.get_detailed_info(env_id)
+    result = wrap_call(server.reset, body.env_id, body.task_id)
+    if isinstance(result, JSONResponse):
+        return result
+    if isinstance(result, dict) and "observation" in result:
+        return {
+            "observation": result.get("observation"),
+            "info": {k: v for k, v in result.items() if k != "observation"},
+        }
+    return {"observation": result, "info": {}}
 
 @app.post("/close")
 def close(body: CloseRequestBody):
-    env_id = body.env_id
-    print(f"/close {env_id}")
-    return server.close(env_id)
+    result = wrap_call(server.close, body.env_id)
+    if isinstance(result, JSONResponse):
+        return result
+    return {"closed": bool(result), "env_id": body.env_id}

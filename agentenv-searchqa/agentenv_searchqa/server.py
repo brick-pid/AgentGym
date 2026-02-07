@@ -2,7 +2,9 @@ from fastapi import FastAPI, Request
 import time
 import logging
 import os
+from fastapi.responses import JSONResponse
 
+from utils.error_utils import wrap_call
 from .env_wrapper import searchqa_env_server
 from .model import *
 from .utils import debug_flg
@@ -33,38 +35,47 @@ async def log_request_response_time(request: Request, call_next):
     )
     return response
 
-@app.get("/", response_model=str)
-def generate_ok():
-    """Test connectivity"""
-    return "ok"
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "searchqa"}
 
 @app.post("/create")
 def create(create_query: CreateQuery):
-    """Create a new environment"""
-    env = searchqa_env_server.create(create_query.task_id)
+    env = wrap_call(searchqa_env_server.create, create_query.task_id)
+    if isinstance(env, JSONResponse):
+        return env
     return {"env_id": env}
 
-@app.post("/step", response_model=StepResponse)
+@app.post("/step")
 def step(step_query: StepQuery):
-    # print(f"Step query: {step_query.action}")
-    observation, reward, done, info = searchqa_env_server.step(
-        step_query.env_id, step_query.action
-    )
-    # print(f"Observation: {observation}")
-    return StepResponse(observation=observation, reward=reward, done=done,info=info)
+    result = wrap_call(searchqa_env_server.step, step_query.env_id, step_query.action)
+    if isinstance(result, JSONResponse):
+        return result
+    observation, reward, done, info = result
+    info = info or {}
+    return {
+        "observation": observation,
+        "reward": reward,
+        "done": done,
+        "info": info,
+    }
 
-@app.get("/observation", response_model=str)
-def observation(env_id: int):
-    return searchqa_env_server.observation(env_id)
 
-@app.post("/reset", response_model=str)
+@app.post("/reset")
 def reset(reset_query: ResetQuery):
     env_id = reset_query.env_id
-    searchqa_env_server.reset(env_id, reset_query.task_id)
-    return searchqa_env_server.observation(env_id)
+    result = wrap_call(searchqa_env_server.reset, env_id, reset_query.task_id)
+    if isinstance(result, JSONResponse):
+        return result
+    obs = wrap_call(searchqa_env_server.observation, env_id)
+    if isinstance(obs, JSONResponse):
+        return obs
+    return {"observation": obs, "info": {}}
 
 
 @app.post("/close")
 def close(body: CloseRequestBody):
-    # print(f"/close {body.env_id}")
-    return searchqa_env_server.close(body.env_id)
+    result = wrap_call(searchqa_env_server.close, body.env_id)
+    if isinstance(result, JSONResponse):
+        return result
+    return {"closed": bool(result), "env_id": body.env_id}

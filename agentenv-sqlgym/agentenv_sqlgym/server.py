@@ -4,10 +4,11 @@ FastAPI Server
 
 import logging
 import time
-from typing import List, Literal, Tuple
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
+from utils.error_utils import wrap_call
 from .environment import sqlgym_env_server
 from .model import *
 from .utils import debug_flg
@@ -28,49 +29,46 @@ async def log_request_response_time(request: Request, call_next):
     return response
 
 
-@app.get("/", response_model=str)
-async def generate_ok():
-    """Test connectivity"""
-    return "ok"
-
-
-@app.get("/list_envs", response_model=List[int])
-async def list_envs():
-    """List all environments"""
-    return list(sqlgym_env_server.env.keys())
+@app.get("/health")
+async def health():
+    return {"status": "ok", "service": "sqlgym"}
 
 
 @app.post("/create")
 async def create():
-    """Create a new environment"""
-    env = sqlgym_env_server.create()
+    env = wrap_call(sqlgym_env_server.create)
+    if isinstance(env, JSONResponse):
+        return env
 
     return {"env_id": env}
 
 
-@app.post("/step", response_model=StepResponse)
+@app.post("/step")
 async def step(step_query: StepQuery):
-    print("/step")
-    env_id = step_query.env_id
-    print(env_id)
-    print(step_query.action)
-    state, reward, done, info = sqlgym_env_server.step(
-        env_id, step_query.action
-    )
-    print(env_id)
-    print(state)
-    return StepResponse(state=state, reward=reward, done=done, info=info)
+    result = wrap_call(sqlgym_env_server.step, step_query.env_id, step_query.action)
+    if isinstance(result, JSONResponse):
+        return result
+    observation, reward, done, info = result
+    info = info or {}
+    return {
+        "observation": observation,
+        "reward": reward,
+        "done": done,
+        "info": info,
+    }
 
 
-@app.get("/observation", response_model=str)
-async def observation(env_id: int):
-    print("/observation")
-    print(env_id)
-    res = sqlgym_env_server.observation(env_id)
-    return res
-
-
-@app.post("/reset", response_model=Tuple[str, None])
+@app.post("/reset")
 async def reset(reset_query: ResetQuery):
-    print(reset_query)
-    return sqlgym_env_server.reset(reset_query.env_id, reset_query.task_id), None
+    result = wrap_call(sqlgym_env_server.reset, reset_query.env_id, reset_query.task_id)
+    if isinstance(result, JSONResponse):
+        return result
+    return {"observation": result, "info": {}}
+
+
+@app.post("/close")
+async def close(body: CloseRequestBody):
+    result = wrap_call(sqlgym_env_server.close, body.env_id)
+    if isinstance(result, JSONResponse):
+        return result
+    return {"closed": bool(result), "env_id": body.env_id}

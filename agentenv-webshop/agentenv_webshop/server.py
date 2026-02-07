@@ -4,10 +4,11 @@ FastAPI Server
 
 import logging
 import time
-from typing import List, Tuple
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
+from utils.error_utils import wrap_call
 from .environment import webshop_env_server
 from .model import *
 from .utils import debug_flg
@@ -28,76 +29,46 @@ async def log_request_response_time(request: Request, call_next):
     return response
 
 
-@app.get("/", response_model=str)
-async def generate_ok():
-    """Test connectivity"""
-    return "ok"
-
-
-@app.get("/list_envs", response_model=List[int])
-async def list_envs():
-    """List all environments"""
-    return list(webshop_env_server.env.keys())
+@app.get("/health")
+async def health():
+    return {"status": "ok", "service": "webshop"}
 
 
 @app.post("/create")
 async def create():
-    """Create a new environment"""
-    env = webshop_env_server.create()
+    env = wrap_call(webshop_env_server.create)
+    if isinstance(env, JSONResponse):
+        return env
 
     return {"env_id": env}
 
 
-@app.post("/step", response_model=StepResponse)
+@app.post("/step")
 def step(step_query: StepQuery):
-    print("/step")
-    print(step_query.env_id)
-    print(step_query.action)
-    state, reward, done, info = webshop_env_server.step(
-        step_query.env_id, step_query.action
-    )
-    print(step_query.env_id)
-    print(state)
-    return StepResponse(state=state, reward=reward, done=done, info=info)
+    result = wrap_call(webshop_env_server.step, step_query.env_id, step_query.action)
+    if isinstance(result, JSONResponse):
+        return result
+    observation, reward, done, info = result
+    info = info or {}
+    return {
+        "observation": observation,
+        "reward": reward,
+        "done": done,
+        "info": info,
+    }
 
 
-@app.get("/available_actions", response_model=AvailableActionsResponse)
-def get_available_actions(env_id: int):
-    res = webshop_env_server.get_available_actions(env_id)
-    has_search_bar = res["has_search_bar"]
-    clickables = res["clickables"]
-    return AvailableActionsResponse(
-        has_search_bar=has_search_bar, clickables=clickables
-    )
-
-
-@app.get("/instruction_text", response_model=str)
-def get_instruction_text(env_id: int):
-    print("/instruction_text")
-    print(env_id)
-    res = webshop_env_server.get_instruction_text(env_id)
-    print(res)
-    return res
-
-
-@app.get("/observation", response_model=str)
-def observation(env_id: int):
-    print("/observation")
-    print(env_id)
-    res = webshop_env_server.observation(env_id)
-    return res
-
-
-@app.get("/state", response_model=StateResponse)
-def get_state(env_id: int):
-    print("/state")
-    url, html, instruction_text = webshop_env_server.state(env_id)
-    print(env_id)
-    print(instruction_text)
-    return StateResponse(url=url, html=html, instruction_text=instruction_text)
-
-
-@app.post("/reset", response_model=Tuple[str, None])
+@app.post("/reset")
 def reset(reset_query: ResetQuery):
-    print(reset_query)
-    return webshop_env_server.reset(reset_query.env_id, reset_query.task_id)
+    result = wrap_call(webshop_env_server.reset, reset_query.env_id, reset_query.task_id)
+    if isinstance(result, JSONResponse):
+        return result
+    return {"observation": result, "info": {}}
+
+
+@app.post("/close")
+def close(body: CloseRequestBody):
+    result = wrap_call(webshop_env_server.close, body.env_id)
+    if isinstance(result, JSONResponse):
+        return result
+    return {"closed": bool(result), "env_id": body.env_id}

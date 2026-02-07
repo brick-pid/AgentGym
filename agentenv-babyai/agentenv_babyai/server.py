@@ -1,5 +1,8 @@
 from fastapi import FastAPI
 import os
+from fastapi.responses import JSONResponse
+
+from utils.error_utils import wrap_call
 from .model import *
 from .environment import server
 
@@ -17,39 +20,49 @@ if VISUAL:
         allow_headers=["*"],
     )
 
-@app.get("/")
-def hello():
-    return "This is environment BabyAI."
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "babyai"}
 
 
 @app.post("/create")
 async def create():
-    return server.create()
+    result = wrap_call(server.create)
+    if isinstance(result, JSONResponse):
+        return result
+    return result
 
 
 @app.post("/step")
 def step(body: StepRequestBody):
-    return server.step(body.env_id, body.action)
+    result = wrap_call(server.step, body.env_id, body.action)
+    if isinstance(result, JSONResponse):
+        return result
+    if isinstance(result, dict) and "done" in result:
+        return {
+            "observation": result.get("observation"),
+            "reward": result.get("reward", 0),
+            "done": result.get("done", False),
+            "info": {k: v for k, v in result.items() if k not in {"observation", "reward", "done"}},
+        }
+    return result
 
 
 @app.post("/reset")
 def reset(body: ResetRequestBody):
-    return server.reset(body.env_id, body.task_id)
-
-@app.get("/observation")
-def get_observation(env_id: int):
-    print(f"Observing environment {env_id}")
-    return server.observe(env_id)
+    result = wrap_call(server.reset, body.env_id, body.task_id)
+    if isinstance(result, JSONResponse):
+        return result
+    if isinstance(result, dict) and "observation" in result:
+        return {
+            "observation": result.get("observation"),
+            "info": {k: v for k, v in result.items() if k != "observation"},
+        }
+    return {"observation": result, "info": {}}
 
 @app.post("/close")
-def reset(body: CloseRequestBody):
-    print("body", body)
-    return server.close(body.env_id)
-
-@app.post("/render")
-def render_endpoint(body: CloseRequestBody):
-    try:
-        result = server.render(body.env_id)
+def close(body: CloseRequestBody):
+    result = wrap_call(server.close, body.env_id)
+    if isinstance(result, JSONResponse):
         return result
-    except Exception as e:
-        return {"error": str(e)}
+    return {"closed": bool(result), "env_id": body.env_id}

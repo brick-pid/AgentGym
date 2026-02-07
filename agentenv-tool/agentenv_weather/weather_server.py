@@ -1,11 +1,9 @@
-"""
-FastAPI Server
-"""
-
-from typing import List
+"""FastAPI Server."""
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
+from utils.error_utils import close_env, wrap_call
 from .weather_environment import weather_env_server
 from .weather_model import *
 from .weather_utils import debug_flg
@@ -13,39 +11,49 @@ from .weather_utils import debug_flg
 app = FastAPI(debug=debug_flg)
 
 
-@app.get("/", response_model=str)
-def generate_ok():
-    """Test connectivity"""
-    return "ok"
+def _close_env(env_id: int):
+    return close_env(weather_env_server.env, env_id)
 
 
-@app.get("/list_envs", response_model=List[int])
-def list_envs():
-    """List all environments"""
-    return list(weather_env_server.env.keys())
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "weather"}
 
 
 @app.post("/create")
 def create(create_query: CreateQuery):
-    """Create a new environment"""
-    env = weather_env_server.create(create_query.task_id)
+    env = wrap_call(weather_env_server.create, create_query.task_id)
+    if isinstance(env, JSONResponse):
+        return env
     return {"env_id": env}
 
 
-@app.post("/step", response_model=StepResponse)
+@app.post("/step")
 def step(step_query: StepQuery):
-    observation, reward, done, _ = weather_env_server.step(
-        step_query.env_id, step_query.action
-    )
-    return StepResponse(observation=observation, reward=reward, done=done)
+    result = wrap_call(weather_env_server.step, step_query.env_id, step_query.action)
+    if isinstance(result, JSONResponse):
+        return result
+    observation, reward, done, info = result
+    info = info or {}
+    return {
+        "observation": observation,
+        "reward": reward,
+        "done": done,
+        "info": info,
+    }
 
 
-@app.get("/observation", response_model=str)
-def observation(env_id: int):
-    return weather_env_server.observation(env_id)
-
-
-@app.post("/reset", response_model=str)
+@app.post("/reset")
 def reset(reset_query: ResetQuery):
-    weather_env_server.reset(reset_query.env_id, reset_query.task_id)
-    return weather_env_server.observation(reset_query.env_id)
+    result = wrap_call(weather_env_server.reset, reset_query.env_id, reset_query.task_id)
+    if isinstance(result, JSONResponse):
+        return result
+    obs = wrap_call(weather_env_server.observation, reset_query.env_id)
+    if isinstance(obs, JSONResponse):
+        return obs
+    return {"observation": obs, "info": {}}
+
+
+@app.post("/close")
+def close(body: CloseRequestBody):
+    return _close_env(body.env_id)

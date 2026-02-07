@@ -1,5 +1,8 @@
 from fastapi import FastAPI
 import os
+from fastapi.responses import JSONResponse
+
+from utils.error_utils import wrap_call
 from .model import *
 from .environment import server
 
@@ -17,60 +20,48 @@ if VISUAL:
         allow_headers=["*"],
     )
 
-@app.get("/")
-def hello():
-    return "This is environment ScienceWorld."
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "sciworld"}
 
 
 @app.post("/create")
 def create():
-    return server.create()
+    result = wrap_call(server.create)
+    if isinstance(result, JSONResponse):
+        return result
+    return result
 
 
 @app.post("/step")
 def step(body: StepRequestBody):
-    return server.step(body.env_id, body.action)
-
-@app.post("/step_visual")
-def step_visual(body: StepRequestBody):
-    return server.step_visual(body.env_id, body.action)
+    result = wrap_call(server.step, body.env_id, body.action)
+    if isinstance(result, JSONResponse):
+        return result
+    if isinstance(result, dict) and "done" in result:
+        return {
+            "observation": result.get("observation"),
+            "reward": result.get("reward", 0),
+            "done": result.get("done", False),
+            "info": {k: v for k, v in result.items() if k not in {"observation", "reward", "done"}},
+        }
+    return result
 
 @app.post("/reset")
 def reset(body: ResetRequestBody):
-    return server.reset(body.env_id, body.task_id)
+    result = wrap_call(server.reset, body.env_id, body.task_id)
+    if isinstance(result, JSONResponse):
+        return result
+    if isinstance(result, dict) and "observation" in result:
+        return {
+            "observation": result.get("observation"),
+            "info": {k: v for k, v in result.items() if k != "observation"},
+        }
+    return {"observation": result, "info": {}}
 
 @app.post("/close")
 def close(body: CloseRequestBody):
-    return server.close(body.env_id)
-
-@app.get("/observation")
-def get_observation(env_id: int):
-    return server.get_observation(env_id)
-
-
-@app.get("/action_hint")
-def get_action_hint(env_id: int):
-    return server.get_action_hint(env_id)
-
-
-@app.get("/goals")
-def get_goals(env_id: int):
-    return server.get_goals(env_id)
-
-
-@app.get("/detail")
-def get_detailed_info(env_id: int):
-    return server.get_detailed_info(env_id)
-
-
-@app.get("/task_description")
-def get_task_description(env_id: int):
-    return server.get_task_description(env_id)
-
-@app.get("/object_tree")
-def get_object_tree(env_id: int):
-    return server.get_object_tree(env_id)
-
-@app.get("/state")
-def get_current_state(env_id: int):
-    return server.get_current_state(env_id)
+    result = wrap_call(server.close, body.env_id)
+    if isinstance(result, JSONResponse):
+        return result
+    return {"closed": bool(result), "env_id": body.env_id}
