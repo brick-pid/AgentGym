@@ -2,15 +2,15 @@ from fastapi import FastAPI, Request
 import time
 import logging
 import os
-from fastapi.responses import JSONResponse
 
-from utils.error_utils import wrap_call
+from .utils import register_error_handlers
 from .env_wrapper import searchqa_env_server
 from .model import *
 from .utils import debug_flg
 
 
 app = FastAPI(debug=debug_flg)
+register_error_handlers(app)
 
 VISUAL = os.environ.get("VISUAL", "false").lower() == "true"
 if VISUAL:
@@ -41,17 +41,12 @@ def health():
 
 @app.post("/create")
 def create(create_query: CreateQuery):
-    env = wrap_call(searchqa_env_server.create, create_query.task_id)
-    if isinstance(env, JSONResponse):
-        return env
+    env = searchqa_env_server.create(create_query.task_id)
     return {"env_id": env}
 
 @app.post("/step")
 def step(step_query: StepQuery):
-    result = wrap_call(searchqa_env_server.step, step_query.env_id, step_query.action)
-    if isinstance(result, JSONResponse):
-        return result
-    observation, reward, done, info = result
+    observation, reward, done, info = searchqa_env_server.step(step_query.env_id, step_query.action)
     info = info or {}
     return {
         "observation": observation,
@@ -64,18 +59,12 @@ def step(step_query: StepQuery):
 @app.post("/reset")
 def reset(reset_query: ResetQuery):
     env_id = reset_query.env_id
-    result = wrap_call(searchqa_env_server.reset, env_id, reset_query.task_id)
-    if isinstance(result, JSONResponse):
-        return result
-    obs = wrap_call(searchqa_env_server.observation, env_id)
-    if isinstance(obs, JSONResponse):
-        return obs
+    searchqa_env_server.reset(env_id, reset_query.task_id)
+    obs = searchqa_env_server.observation(env_id)
     return {"observation": obs, "info": {}}
 
 
 @app.post("/close")
 def close(body: CloseRequestBody):
-    result = wrap_call(searchqa_env_server.close, body.env_id)
-    if isinstance(result, JSONResponse):
-        return result
+    result = searchqa_env_server.close(body.env_id)
     return {"closed": bool(result), "env_id": body.env_id}

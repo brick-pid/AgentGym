@@ -10,7 +10,7 @@ import re
 import argparse
 import datasets
 
-from .utils import Config
+from .utils import Config, EnvNotFoundError, TaskOutOfRangeError
 from .retriever import get_retriever
 from .reward_score import compute_score_em, compute_score_em_format
 
@@ -221,7 +221,7 @@ class SearchQAEnvServer:
 
     def _check_env_idx(self, env_idx):
         if env_idx not in self.env:
-            raise IndexError(f"Env {env_idx} not found")
+            raise EnvNotFoundError(f"Env {env_idx} not found")
         if self.env[env_idx] is None:
             raise NotInitializedError(f"Env {env_idx} not initialized")
 
@@ -236,7 +236,7 @@ class SearchQAEnvServer:
 
                 return self.dataset[mode][_id]
         if _id is None:
-            raise ValueError(f"Task id {task_id} is out of range.")
+            raise TaskOutOfRangeError(f"Task id {task_id} is out of range.")
         
     def __del__(self):
         for idx in self.ls:
