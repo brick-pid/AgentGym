@@ -10,7 +10,7 @@ import pytest
 import requests
 
 # Configuration
-BASE_URL = "http://0.0.0.0:36004"
+BASE_URL = "http://127.0.0.1:36004"
 TIMEOUT = 30
 
 

@@ -17,7 +17,7 @@ import requests
 import time
 
 # Configuration
-BASE_URL = "http://0.0.0.0:36002"
+BASE_URL = "http://127.0.0.1:36002"
 TIMEOUT = 30
 
 
