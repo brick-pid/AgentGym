@@ -26,33 +26,33 @@ class SciWorldWrapper(BaseEnvWrapper):
         init_env.close()
         del init_env
 
-    def create_with_id(self, idx: int):
+    def create_with_id(self, env_id: int):
         env = ScienceWorldEnv()
-        self.env[idx] = env
-        self.info[idx] = {"deleted": False, "done": False}
-        self.ls.append(idx)
-        print(f"-------Env {idx} created--------")
-        return {"env_id": idx}
+        self.env[env_id] = env
+        self.info[env_id] = {"deleted": False, "done": False}
+        self.ls.append(env_id)
+        print(f"-------Env {env_id} created--------")
+        return {"env_id": env_id}
 
-    def step(self, idx: int, action: str):
-        self._check_id(idx)
-        if "task_name" not in self.info[idx]:
+    def step(self, env_id: int, action: str):
+        self._check_env_id(env_id)
+        if "task_name" not in self.info[env_id]:
             raise EpisodeFinishedError(
-                f"Environment {idx} has not been reset. "
+                f"Environment {env_id} has not been reset. "
                 "Please call reset before step."
             )
-        ob, reward, done, info = self.env[idx].step(action)
+        ob, reward, done, info = self.env[env_id].step(action)
         payload = {
             "observation": ob,
             "reward": reward,
             "score": info["score"],
             "done": done,
         }
-        self.info[idx].update(payload)
+        self.info[env_id].update(payload)
         return payload
 
-    def step_visual(self, idx: int, action: str):
-        self._check_id(idx)
+    def step_visual(self, env_id: int, action: str):
+        self._check_env_id(env_id)
         processed_action = action
         if processed_action.endswith("</s>"):
             processed_action = processed_action[:-4]
@@ -62,13 +62,13 @@ class SciWorldWrapper(BaseEnvWrapper):
                 processed_action = action_parts[1].strip()
             else:
                 processed_action = action_parts[0].strip()
-        ob, reward, done, info = self.env[idx].step(processed_action)
+        ob, reward, done, info = self.env[env_id].step(processed_action)
         try:
-            object_tree = self.env[idx].get_object_tree()
+            object_tree = self.env[env_id].get_object_tree()
         except Exception:
             object_tree = None
         try:
-            inventory = self.env[idx].inventory()
+            inventory = self.env[env_id].inventory()
         except Exception:
             inventory = ""
         payload = {
@@ -81,22 +81,22 @@ class SciWorldWrapper(BaseEnvWrapper):
             "inventory": inventory,
             "moves": info.get("moves", 0),
         }
-        self.info[idx].update(payload)
+        self.info[env_id].update(payload)
         return payload
 
-    def reset(self, idx: int, data_idx=None):
-        if data_idx is None:
-            data_idx = 0
-        self._check_id(idx, True)
-        self.env[idx].load(
-            self.games[data_idx]["taskName"],
-            self.games[data_idx]["variationIdx"],
+    def reset(self, env_id: int, task_id=None):
+        if task_id is None:
+            task_id = 0
+        self._check_env_id(env_id, True)
+        self.env[env_id].load(
+            self.games[task_id]["taskName"],
+            self.games[task_id]["variationIdx"],
         )
-        task_description = self.env[idx].get_task_description()
-        ob, reward, done, info = self.env[idx].step("look around")
+        task_description = self.env[env_id].get_task_description()
+        ob, reward, done, info = self.env[env_id].step("look around")
         payload = {
-            "task_name": self.games[data_idx]["taskName"],
-            "var_num": self.games[data_idx]["variationIdx"],
+            "task_name": self.games[task_id]["taskName"],
+            "var_num": self.games[task_id]["variationIdx"],
             "task_description": task_description,
             "observation": ob,
             "reward": reward,
@@ -104,73 +104,73 @@ class SciWorldWrapper(BaseEnvWrapper):
             "deleted": False,
             "done": done,
         }
-        self.info[idx].update(payload)
+        self.info[env_id].update(payload)
         return payload
 
-    def get_observation(self, idx: int):
-        self._check_id(idx)
-        return self.info[idx]["observation"]
+    def get_observation(self, env_id: int):
+        self._check_env_id(env_id)
+        return self.info[env_id]["observation"]
 
-    def get_action_hint(self, idx: int):
-        self._check_id(idx)
+    def get_action_hint(self, env_id: int):
+        self._check_env_id(env_id)
         return {
-            "possible_actions": self.env[idx].get_possible_actions(),
-            "possible_objects": self.env[idx].get_possible_objects(),
+            "possible_actions": self.env[env_id].get_possible_actions(),
+            "possible_objects": self.env[env_id].get_possible_objects(),
         }
 
-    def get_goals(self, idx: int):
-        self._check_id(idx)
-        return {"goals": self.env[idx].get_goal_progress_str()}
+    def get_goals(self, env_id: int):
+        self._check_env_id(env_id)
+        return {"goals": self.env[env_id].get_goal_progress_str()}
 
-    def get_detailed_info(self, idx: int):
-        self._check_id(idx)
-        return self.info[idx]
+    def get_detailed_info(self, env_id: int):
+        self._check_env_id(env_id)
+        return self.info[env_id]
 
-    def _check_id(self, idx: int, is_reset: bool = False):
-        if idx not in self.info:
-            raise EnvNotFoundError(f"The id {idx} is not valid.")
-        if self.info[idx]["deleted"]:
+    def _check_env_id(self, env_id: int, is_reset: bool = False):
+        if env_id not in self.info:
+            raise EnvNotFoundError(f"The id {env_id} is not valid.")
+        if self.info[env_id]["deleted"]:
             raise EnvClosedError(
-                f"The task with environment {idx} has been deleted."
+                f"The task with environment {env_id} has been deleted."
             )
-        if not is_reset and self.info[idx]["done"]:
+        if not is_reset and self.info[env_id]["done"]:
             raise EpisodeFinishedError(
-                f"The task with environment {idx} has finished."
+                f"The task with environment {env_id} has finished."
             )
 
-    def close(self, idx: int):
-        if idx not in self.info:
-            raise EnvNotFoundError(f"The id {idx} is not valid.")
-        if self.info[idx]["deleted"]:
+    def close(self, env_id: int):
+        if env_id not in self.info:
+            raise EnvNotFoundError(f"The id {env_id} is not valid.")
+        if self.info[env_id]["deleted"]:
             raise EnvClosedError(
-                f"The task with environment {idx} has been deleted."
+                f"The task with environment {env_id} has been deleted."
             )
-        self.env[idx].close()
-        self.info[idx]["deleted"] = True
-        self.ls.remove(idx)
-        print(f"-------Env {idx} closed--------")
+        self.env[env_id].close()
+        self.info[env_id]["deleted"] = True
+        self.ls.remove(env_id)
+        print(f"-------Env {env_id} closed--------")
         return True
 
-    def get_task_description(self, idx: int):
-        self._check_id(idx)
-        task_desc = self.env[idx].get_task_description()
+    def get_task_description(self, env_id: int):
+        self._check_env_id(env_id)
+        task_desc = self.env[env_id].get_task_description()
         return {"task_description": task_desc}
 
-    def get_object_tree(self, idx: int):
-        self._check_id(idx)
-        object_tree = self.env[idx].get_object_tree()
+    def get_object_tree(self, env_id: int):
+        self._check_env_id(env_id)
+        object_tree = self.env[env_id].get_object_tree()
         return {"object_tree": object_tree}
 
-    def get_current_state(self, idx: int):
-        self._check_id(idx)
+    def get_current_state(self, env_id: int):
+        self._check_env_id(env_id)
         state = {
-            "observation": self.env[idx].look(),
-            "inventory": self.env[idx].inventory(),
-            "task_description": self.env[idx].get_task_description(),
-            "goal_progress": self.env[idx].get_goal_progress(),
-            "possible_actions": self.env[idx].get_possible_actions()[:10],
-            "possible_objects": self.env[idx].get_possible_objects()[:10],
-            "current_moves": self.env[idx].get_num_moves(),
-            "environment_info": self.info[idx],
+            "observation": self.env[env_id].look(),
+            "inventory": self.env[env_id].inventory(),
+            "task_description": self.env[env_id].get_task_description(),
+            "goal_progress": self.env[env_id].get_goal_progress(),
+            "possible_actions": self.env[env_id].get_possible_actions()[:10],
+            "possible_objects": self.env[env_id].get_possible_objects()[:10],
+            "current_moves": self.env[env_id].get_num_moves(),
+            "environment_info": self.info[env_id],
         }
         return state

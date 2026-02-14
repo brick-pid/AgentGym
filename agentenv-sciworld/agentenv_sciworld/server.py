@@ -12,7 +12,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(filename)s:%(lineno)d - %(message)s",
 )
 
-_parallel_actor = int(os.environ.get("SCIWORLD_PARALLEL_ACTOR", "8"))
+_parallel_actor = int(os.environ.get("SCIWORLD_PARALLEL_ACTOR", "64"))
 _ipc_timeout = float(os.environ.get("SCIWORLD_IPC_TIMEOUT", "120.0"))
 
 
@@ -50,7 +50,7 @@ def _register_routes(application: FastAPI, r: Router):
 
     @application.post("/reset")
     async def reset(body: ResetRequestBody):
-        result = await r.reset(body.env_id, data_idx=body.task_id)
+        result = await r.reset(body.env_id, task_id=body.task_id)
         if isinstance(result, dict) and "observation" in result:
             return {
                 "observation": result.get("observation"),
