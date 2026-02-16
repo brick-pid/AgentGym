@@ -1,0 +1,6 @@
+[project]
+name = "agentenv_pool"
+version = "0.0.1"
+description = "Generic worker-pool infrastructure for AgentEnv environments"
+requires-python = ">=3.8"
+license = {text = "MIT"}
