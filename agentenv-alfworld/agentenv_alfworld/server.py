@@ -39,3 +39,8 @@ def get_observation(id: int):
 @app.get("/detail")
 def get_detailed_info(id: int):
     return server.get_detailed_info(id)
+
+
+@app.post("/close")
+async def close(body: CloseRequestBody):
+    return server.close(body.id)

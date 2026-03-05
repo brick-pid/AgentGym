@@ -1,6 +1,7 @@
 import os
 import json
 import threading
+import textworld.gym
 from .environment import SingleAlfredTWEnv
 from .utils import load_config, process_ob
 
@@ -23,6 +24,7 @@ class ALFWorld_Wrapper:
         self.ls = []
         self.env = {}  # dict[id, env_item]
         self.env_init = {}  # dict[id, env_item]
+        self.env_id_map = {}  # dict[id, gym_env_id] for registry cleanup
         self.info = {}  # dict[id, env_info]
         self.games = []  # list[game_file]
         self._lock = threading.Lock()
@@ -78,7 +80,7 @@ class ALFWorld_Wrapper:
                 idx = self._max_id
                 self._max_id += 1
             self.env[idx] = SingleAlfredTWEnv(self.config)
-            self.info[idx] = {"done": False, "reward": 0, "deleted": False}
+            self.info[idx] = {"done": False, "reward": 0}
             print(f"-------Env {idx} created--------")
             self.ls.append(idx)
             payload = {"id": idx}
@@ -86,9 +88,38 @@ class ALFWorld_Wrapper:
             payload = {"error": f"{e}"}
         return payload
     
+    def _cleanup_env(self, idx: int):
+        """Close gym env and remove its registry entry to free memory."""
+        if idx in self.env_init:
+            try:
+                self.env_init[idx].close()
+            except Exception:
+                pass
+            del self.env_init[idx]
+        # Remove from textworld gym registry
+        if idx in self.env_id_map:
+            textworld.gym.registry.pop(self.env_id_map[idx], None)
+            del self.env_id_map[idx]
+
+    def close(self, idx: int):
+        try:
+            if idx not in self.info:
+                return {"error": f"The id {idx} is not valid."}
+            self._cleanup_env(idx)
+            if idx in self.env:
+                del self.env[idx]
+            if idx in self.info:
+                del self.info[idx]
+            if idx in self.ls:
+                self.ls.remove(idx)
+            print(f"-------Env {idx} closed--------")
+            return {"id": idx, "status": "closed"}
+        except Exception as e:
+            return {"error": str(e)}
+
     def __del__(self):
-        for idx in self.ls:
-            self.env_init[idx].close()
+        for idx in list(self.ls):
+            self._cleanup_env(idx)
             print(f"-------Env {idx} closed--------")
 
     def step(self, idx: int, action: str):
@@ -114,9 +145,17 @@ class ALFWorld_Wrapper:
             return {"error": 'world_type must be one of "Text", "Embody" and "Hybrid"'}
         try:
             self._check_id(idx, True)
+            # Clean up previous gym env and registry entry
+            self._cleanup_env(idx)
             self.env[idx].game_files = [self.games[game]]
             self.env[idx].num_games = 1
+            # Track registry keys before/after to capture the new env_id
+            keys_before = set(textworld.gym.registry.keys())
             self.env_init[idx] = self.env[idx].init_env(batch_size=1)
+            keys_after = set(textworld.gym.registry.keys())
+            new_keys = keys_after - keys_before
+            if new_keys:
+                self.env_id_map[idx] = new_keys.pop()
             ob, info = self.env_init[idx].reset()
             ob = "\n".join(ob[0].split("\n\n")[1:])
             available_actions = info.get("admissible_commands", [[]])[0]
@@ -133,7 +172,6 @@ class ALFWorld_Wrapper:
                 "available_actions": available_actions,
                 "done": False,
                 "reward": 0,
-                "deleted": False,
             }
         except Exception as e:
             payload = {"error": str(e)}
@@ -163,8 +201,6 @@ class ALFWorld_Wrapper:
     def _check_id(self, idx: int, is_reset: bool = False):
         if idx not in self.info:
             raise NameError(f"The id {idx} is not valid.")
-        if self.info[idx]["deleted"]:
-            raise NameError(f"The task with environment {idx} has been deleted.")
         if not is_reset and self.info[idx]["done"]:
             print("is reset", is_reset)
             print("done", self.info[idx]["done"])

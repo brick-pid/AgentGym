@@ -10,3 +10,7 @@ class ResetRequestBody(BaseModel):
     id: int
     game: int
     world_type: str
+
+
+class CloseRequestBody(BaseModel):
+    id: int
