@@ -32,7 +32,11 @@ class WebshopEnvServer:
             self.now = self.now + 1
             if self.now == self.sz:
                 self.now = 0
-            return self.ls[self.now]
+            old_idx = self.ls[self.now]
+            # Close old env to free session memory before reuse
+            if old_idx in self.env:
+                self.env[old_idx].close()
+            return old_idx
 
         self.env[idx] = gym.make(
             "WebAgentTextEnv-v0",
@@ -95,10 +99,22 @@ class WebshopEnvServer:
     def reset(self, env_idx, session_id: Optional[int]):
         return self.env[env_idx].reset(session=session_id)
     
+    def close(self, env_idx):
+        """Close and remove a single environment to free memory."""
+        if env_idx in self.env:
+            self.env[env_idx].close()
+            del self.env[env_idx]
+            if env_idx in self.ls:
+                self.ls.remove(env_idx)
+            print(f"-------Env {env_idx} closed--------")
+
     def __del__(self):
-        for idx in self.ls:
-            self.env[idx].close
-            print(f"-------Env {idx} closed--------")
+        for idx in list(self.ls):
+            if idx in self.env:
+                self.env[idx].close()
+                print(f"-------Env {idx} closed--------")
+        self.env.clear()
+        self.ls.clear()
 
 
 webshop_env_server = WebshopEnvServer()

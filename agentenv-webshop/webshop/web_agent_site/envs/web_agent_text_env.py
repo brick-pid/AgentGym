@@ -261,7 +261,11 @@ class WebAgentTextEnv(gym.Env):
         pass
 
     def close(self):
-        pass
+        # Clean up session data from SimServer to free memory
+        if hasattr(self, 'session') and self.session is not None:
+            self.server.user_sessions.pop(self.session, None)
+        self.prev_obs.clear()
+        self.prev_actions.clear()
     
 
 def tag_visible(element):

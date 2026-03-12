@@ -101,3 +101,10 @@ def get_state(env_idx: int):
 def reset(reset_query: ResetQuery):
     print(reset_query)
     return webshop_env_server.reset(reset_query.env_idx, reset_query.session_id)
+
+
+@app.post("/close")
+def close(close_query: CloseQuery):
+    print(f"/close env_idx={close_query.env_idx}")
+    webshop_env_server.close(close_query.env_idx)
+    return {"success": True}
